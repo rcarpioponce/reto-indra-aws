@@ -1,0 +1,14 @@
+{
+  "org": "",
+  "app": "",
+  "interactiveCli": false,
+  "shownNotificationsHistory": {
+    "HTTP_REST_API_2": 1746734499981,
+    "GENERIC_CONSOLE_MSG_2": 1746725223235,
+    "JS_FRAMEWORK_API_3": 1746730011759,
+    "OUTDATED_MAJOR_VERSION": 1746560366416
+  },
+  "meta": {
+    "updated_at": 1746734500
+  }
+}

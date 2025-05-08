@@ -8,7 +8,7 @@ provider:
   stage: dev
   environment:
     DYNAMODB_TABLE: ${env:DYNAMODB_TABLE, 'appointments'}
-    SNS_TOPIC: ${env:SNS_TOPIC, 'agendamiento-topic'}
+    SNS_TOPIC: ${self:custom.snsTopicArn}
     SQS_PE: ${env:SQS_PE, 'sqs-pe'}
     SQS_CL: ${env:SQS_CL, 'sqs-cl'}
     SQS_RESULT: ${env:SQS_RESULT, 'sqs-result'}
@@ -26,11 +26,14 @@ provider:
             - dynamodb:PutItem
             - dynamodb:Query
             - dynamodb:UpdateItem
-          Resource: arn:aws:dynamodb:${self:provider.region}:*:table/appointments
+          Resource: 
+            - arn:aws:dynamodb:${self:provider.region}:*:table/appointments
+            - arn:aws:dynamodb:${self:provider.region}:*:table/appointments/index/*
         - Effect: Allow
           Action:
             - sns:Publish
-          Resource: arn:aws:sns:${self:provider.region}:*:agendamiento-topic
+          Resource:
+            Ref: AppointmentSNSTopic
         - Effect: Allow
           Action:
             - sqs:SendMessage
@@ -52,11 +55,14 @@ package:
     - 'node_modules/aws-sdk/**'
 
 plugins:
+  - serverless-auto-swagger
   - serverless-esbuild
   - serverless-offline
   - serverless-dotenv-plugin
 
 custom:
+  snsTopicArn:
+     Fn::GetAtt: [AppointmentSNSTopic, TopicArn]
   esbuild:
     bundle: true
     minify: false
@@ -67,15 +73,44 @@ custom:
     external:
       - aws-sdk
     exclude: []
+    packager: npm
+    keepNames: true
+  autoswagger:
+    title: Appointment Service API
+    apiType: http
+    typefiles:
+      - src/application/dto/appointment-input.d.ts
+      - src/domain/models/appointment.d.ts
 
-functions:
+functions:          
   appointment:
     handler: src/interfaces/appointment/handler.createAppointment
     events:
       - http:
           path: appointments
           method: post
-
+          bodyType: AppointmentInput
+          responseData:
+            201:
+              description: Appointment created successfully
+            400:
+              description: Bad request
+  getAppointmentsByInsuredId:
+    handler: src/interfaces/appointments/handler.getAppointmentsByInsuredId
+    events:
+      - http:
+          path: appointments/{insuredId}
+          method: get
+          request:
+            parameters:
+              paths:
+                insuredId: true
+          responseData:
+            200:
+              description: Appointments retrieved successfully
+              bodyType: AppointmentsResponse
+            400:
+              description: Bad request
   appointment_pe:
     handler: src/interfaces/appointment-pe/handler.appointmentHandler
     events:
@@ -105,15 +140,20 @@ resources:
         TableName: appointments
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: insuredId
+          - AttributeName: id
             AttributeType: S
-          - AttributeName: scheduleId
-            AttributeType: N
-        KeySchema:
           - AttributeName: insuredId
+            AttributeType: S            
+        KeySchema:
+          - AttributeName: id
             KeyType: HASH
-          - AttributeName: scheduleId
-            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: insuredId-index
+            KeySchema:
+              - AttributeName: insuredId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
 
     AppointmentSNSTopic:
       Type: AWS::SNS::Topic
@@ -223,3 +263,10 @@ resources:
               Condition:
                 ArnEquals:
                   aws:SourceArn: !GetAtt MyEventRule.Arn
+
+outputs:
+  SnsTopicArn:
+    Value:
+      Ref: AppointmentSNSTopic
+    Export:
+      Name: ${self:service}-${self:provider.stage}-SnsTopicArn

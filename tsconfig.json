@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",                      // ✅ Bien para Node 18
+    "module": "commonjs",                   // ✅ Requerido por Lambda
+    "lib": ["ES2020"],                      // ✅ Suficiente para la mayoría de APIs
+    "moduleResolution": "node",            // ✅ Recomendado para serverless-esbuild
+    "resolveJsonModule": true,             // ✅ Si importas JSONs (útil para pruebas o mocks)
+    "allowSyntheticDefaultImports": true,  // ✅ Mejora compatibilidad con librerías comunes
+    "esModuleInterop": true,               // ✅ Correcto para importar libs estilo ESM
+    "strict": true,                        // ✅ Mantiene el tipado estricto
+    "skipLibCheck": true,                  // ✅ Acelera compilación
+    "forceConsistentCasingInFileNames": true, // ✅ Buen control multiplataforma
+    "outDir": "dist"                       // ✅ Aunque es ignorado por esbuild, no estorba
+  },
+  "include": ["src/**/*.ts"]
+}
