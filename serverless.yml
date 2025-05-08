@@ -1,0 +1,225 @@
+service: service-appointment
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-2
+  stage: dev
+  environment:
+    DYNAMODB_TABLE: ${env:DYNAMODB_TABLE, 'appointments'}
+    SNS_TOPIC: ${env:SNS_TOPIC, 'agendamiento-topic'}
+    SQS_PE: ${env:SQS_PE, 'sqs-pe'}
+    SQS_CL: ${env:SQS_CL, 'sqs-cl'}
+    SQS_RESULT: ${env:SQS_RESULT, 'sqs-result'}
+    DB_HOST: ${env:DB_HOST, 'localhost'}
+    DB_PORT: ${env:DB_PORT, '3306'}
+    DB_NAME: ${env:DB_NAME, 'demo'}
+    DB_USER: ${env:DB_USER, 'user'}
+    DB_PASSWORD: ${env:DB_PASSWORD, 'pass'}
+    EVENT_BUS_NAME: MyEventBus
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:Query
+            - dynamodb:UpdateItem
+          Resource: arn:aws:dynamodb:${self:provider.region}:*:table/appointments
+        - Effect: Allow
+          Action:
+            - sns:Publish
+          Resource: arn:aws:sns:${self:provider.region}:*:agendamiento-topic
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+          Resource:
+            - arn:aws:sqs:${self:provider.region}:*:sqs-pe
+            - arn:aws:sqs:${self:provider.region}:*:sqs-cl
+            - arn:aws:sqs:${self:provider.region}:*:sqs-result
+        - Effect: Allow
+          Action:
+            - events:PutEvents
+          Resource: "*"
+
+package:
+  individually: true
+  patterns:
+    - '!**/*.ts'
+    - 'node_modules/aws-sdk/**'
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node18
+    platform: node
+    concurrency: 10
+    external:
+      - aws-sdk
+    exclude: []
+
+functions:
+  appointment:
+    handler: src/interfaces/appointment/handler.createAppointment
+    events:
+      - http:
+          path: appointments
+          method: post
+
+  appointment_pe:
+    handler: src/interfaces/appointment-pe/handler.appointmentHandler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [SQSPeQueue, Arn]
+
+  appointment_cl:
+    handler: src/interfaces/appointment-cl/handler.appointmentHandler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [SQSClQueue, Arn]
+
+  appointment_result:
+    handler: src/interfaces/appointment-result/handler.resultHandler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [SQSResultQueue, Arn]
+
+resources:
+  Resources:
+    AppointmentsDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: appointments
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: insuredId
+            AttributeType: S
+          - AttributeName: scheduleId
+            AttributeType: N
+        KeySchema:
+          - AttributeName: insuredId
+            KeyType: HASH
+          - AttributeName: scheduleId
+            KeyType: RANGE
+
+    AppointmentSNSTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: agendamiento-topic
+
+    SQSPeQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: sqs-pe
+
+    SQSClQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: sqs-cl
+
+    SQSResultQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: sqs-result
+
+    SNSSubscriptionPE:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref AppointmentSNSTopic
+        Protocol: sqs
+        Endpoint:
+          Fn::GetAtt: [SQSPeQueue, Arn]
+        FilterPolicy:
+          countryISO:
+            - "PE"
+
+    SNSSubscriptionCL:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: !Ref AppointmentSNSTopic
+        Protocol: sqs
+        Endpoint:
+          Fn::GetAtt: [SQSClQueue, Arn]
+        FilterPolicy:
+          countryISO:
+            - "CL"
+
+    PolicySQSPe:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref SQSPeQueue]
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal: "*"
+              Action: sqs:SendMessage
+              Resource: !GetAtt SQSPeQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref AppointmentSNSTopic
+
+    PolicySQSCl:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues: [!Ref SQSClQueue]
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal: "*"
+              Action: sqs:SendMessage
+              Resource: !GetAtt SQSClQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Ref AppointmentSNSTopic
+
+    MyEventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: MyEventBus
+
+    MyEventRule:
+      Type: AWS::Events::Rule
+      Properties:
+        EventBusName: !Ref MyEventBus
+        EventPattern:
+          source:
+            - appointment_pe
+            - appointment_cl
+          detail-type:
+            - event_update_appointment
+        Targets:
+          - Arn:
+              Fn::GetAtt: [SQSResultQueue, Arn]
+            Id: "TargetSQSResult"
+
+    EventBridgePermission:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref SQSResultQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt SQSResultQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !GetAtt MyEventRule.Arn
