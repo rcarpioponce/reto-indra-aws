@@ -81,3 +81,14 @@ Run the test suite with:
 ```bash
 npm test
 ```
+## Workflow
+
+![Service Appointment Workflow](./workflow.png)
+
+The above diagram shows the complete workflow of the service appointment system, from user request to service completion.
+
+## System Architecture Overview
+
+![Service Appointment Workflow](./arquitecture.png)
+
+The Appointment Service follows a serverless, event-driven architecture pattern leveraging several AWS services. This design enables scalability, fault tolerance, and country-specific processing logic.

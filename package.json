@@ -2,10 +2,11 @@
   "name": "service-appointment",
   "version": "1.0.0",
   "scripts": {
-    "deploy": "serverless deploy",
+    "deploy": "serverless deploy --verbose --stage dev --region us-east-2",
     "offline": "serverless offline",
     "remove": "sls remove --stage dev --region us-east-2",
-    "deploy:dev": "sls deploy --force --stage dev --region us-east-2"
+    "deploy:dev": "sls deploy --force --verbose --stage dev --region us-east-2",
+    "test": "jest --config jest.config.ts"
   },
   "dependencies": {
     "aws-sdk": "^2.1692.0",
@@ -32,9 +33,6 @@
     "typescript": "^5.3.3"
   },
   "bundledDependencies": [
-    "aws-sdk"
-  ],
-  "bundleDependencies": [
     "aws-sdk"
   ]
 }
