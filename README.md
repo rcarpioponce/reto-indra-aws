@@ -6,8 +6,6 @@ This project provides a robust service appointment management solution built as 
 ## Features
 - Appointment scheduling
 - Get Appointments by insuredId
-- Responsive design for various device sizes
-- Real-time updates
 
 ## Technology Stack
 ### Backend
